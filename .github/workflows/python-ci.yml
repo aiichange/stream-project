@@ -57,4 +57,4 @@ jobs:
 
       - name: Run Checkov policy scan
         run: |
-          checkov -d infra/terraform
+          checkov -d infra/terraform --config-file infra/terraform/.checkov.yaml
