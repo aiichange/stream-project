@@ -18,6 +18,8 @@ This project implements a production-style Google Cloud data engineering pipelin
 - `data_generation/` — Python scripts for synthetic batch data generation and Yahoo Finance Pub/Sub publishing.
 - `dataflow/` — Apache Beam streaming and batch pipelines.
 - `datafusion/` — Data Fusion ETL guidance for the batch pipeline.
+- `CONTRIBUTING.md` — contribution guidelines and repository standards.
+- `WORKFLOW.md` — local setup, deployment, and environment workflows.
 
 ## GCP Configuration
 
@@ -40,7 +42,13 @@ This project implements a production-style Google Cloud data engineering pipelin
 3. Generate batch data and upload to GCS:
    - `python ../data_generation/synthetic_batch_generator.py --project ga4bigquery-431504 --bucket stock-intel-batch-landing-asia-south1 --upload`
 
-4. Run the Data Fusion ETL pipeline:
+4. (Optional) Use a local Python virtual environment and `.env` file:
+   - `python -m venv .venv`
+   - `./.venv/Scripts/Activate.ps1`
+   - `pip install -r ../data_generation/requirements.txt`
+   - Copy `.env.example` to `.env` and customize values.
+
+5. Run the Data Fusion ETL pipeline:
    - Follow `datafusion/README.md`
 
 5. Run the Dataflow batch job:
@@ -52,6 +60,37 @@ This project implements a production-style Google Cloud data engineering pipelin
 
 7. Analyze in BigQuery:
    - Use the view `stock_intelligence.stock_factor_analysis_view` for sector-level joins.
+
+## Branching strategy
+
+- Use `develop` for ongoing development and feature work.
+- Use `master` for stable production-ready code.
+- Create pull requests from `develop` to `master` when the pipeline is ready for release.
+
+## CI/CD
+
+- GitHub Actions workflows are configured in `.github/workflows/python-ci.yml`, `.github/workflows/terraform-pr.yml`, and `.github/workflows/gcp-deploy.yml`.
+- `python-ci.yml` validates Python code, installs dependencies, runs Terraform init/validate, checks Terraform formatting, and performs a Checkov policy scan.
+- `terraform-pr.yml` runs on pull requests targeting `develop` and `master` and validates Terraform configuration before merge.
+
+## Continuous Deployment
+
+- `gcp-deploy.yml` is the production deployment workflow.
+- It runs on pushes to `master` and via manual dispatch.
+- It authenticates to GCP using GitHub secrets, initializes Terraform, validates configuration, plans changes, and applies the plan.
+- Recommended release flow:
+  1. Develop in `develop` and feature branches.
+  2. Run PR validation via `terraform-pr.yml`.
+  3. Merge `develop` into `master` after review.
+  4. Deploy from `master` with GitHub Actions.
+
+## Remote Terraform state
+
+- A GCS backend is configured in `infra/terraform/backend.tf`.
+- The backend bucket is `stock-intel-terraform-state-asia-south1` and state is stored under `terraform/state`.
+- Create the bucket before the first `terraform init` or bootstrap it manually with:
+  - `gsutil mb -l asia-south1 gs://stock-intel-terraform-state-asia-south1`
+- This enables shared Terraform state and safer production deployments.
 
 ## Notes
 

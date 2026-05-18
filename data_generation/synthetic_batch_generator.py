@@ -1,10 +1,14 @@
 import argparse
 import csv
+import os
 import random
 import uuid
 from datetime import datetime, timedelta
 
+from dotenv import load_dotenv
 from google.cloud import storage
+
+load_dotenv()
 
 SECTORS = [
     "Technology",
@@ -73,13 +77,22 @@ def upload_to_gcs(project_id, bucket_name, source_file, destination_path):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate synthetic batch market factor data")
-    parser.add_argument("--project", required=True, help="GCP project ID")
-    parser.add_argument("--bucket", required=True, help="Cloud Storage bucket name")
+    parser.add_argument("--project", default=None, help="GCP project ID")
+    parser.add_argument("--bucket", default=None, help="Cloud Storage bucket name")
     parser.add_argument("--rows", type=int, default=100, help="Number of synthetic rows")
     parser.add_argument("--output", default="batch_market_factors.csv", help="Local CSV output path")
     parser.add_argument("--upload", action="store_true", help="Upload the generated CSV to Cloud Storage")
-    parser.add_argument("--destination", default="batch/input/batch_market_factors.csv", help="Destination path in GCS")
+    parser.add_argument("--destination", default=None, help="Destination path in GCS")
     args = parser.parse_args()
+
+    project_id = args.project or os.getenv("PROJECT_ID")
+    bucket = args.bucket or os.getenv("BATCH_BUCKET")
+    destination = args.destination or os.getenv("BATCH_INPUT_PATH", "batch/input/batch_market_factors.csv")
+
+    if not project_id:
+        parser.error("--project or PROJECT_ID environment variable is required")
+    if not bucket:
+        parser.error("--bucket or BATCH_BUCKET environment variable is required")
 
     base_date = datetime.utcnow().date() - timedelta(days=10)
     rows = []

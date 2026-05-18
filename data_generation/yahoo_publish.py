@@ -1,10 +1,14 @@
 import argparse
 import json
+import os
 import time
 from datetime import datetime
 
+from dotenv import load_dotenv
 import yfinance as yf
 from google.cloud import pubsub_v1
+
+load_dotenv()
 
 DEFAULT_TICKERS = [
     "AAPL",
@@ -85,10 +89,17 @@ def publish_stock_prices(project_id, topic_name, interval_seconds, tickers):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Publish Yahoo Finance quotes to Pub/Sub")
-    parser.add_argument("--project", required=True, help="GCP project ID")
-    parser.add_argument("--topic", default="stock-prices-topic", help="Pub/Sub topic name")
-    parser.add_argument("--interval", type=int, default=60, help="Seconds between publish batches")
+    parser.add_argument("--project", default=None, help="GCP project ID")
+    parser.add_argument("--topic", default=None, help="Pub/Sub topic name")
+    parser.add_argument("--interval", type=int, default=None, help="Seconds between publish batches")
     parser.add_argument("--symbols", nargs="*", default=DEFAULT_TICKERS, help="List of ticker symbols")
     args = parser.parse_args()
 
-    publish_stock_prices(args.project, args.topic, args.interval, args.symbols)
+    project_id = args.project or os.getenv("PROJECT_ID")
+    topic_name = args.topic or os.getenv("PUBSUB_TOPIC", "stock-prices-topic")
+    interval = args.interval or int(os.getenv("PUBLISH_INTERVAL", "60"))
+
+    if not project_id:
+        parser.error("--project or PROJECT_ID environment variable is required")
+
+    publish_stock_prices(project_id, topic_name, interval, args.symbols)

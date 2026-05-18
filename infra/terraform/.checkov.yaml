@@ -1,0 +1,11 @@
+skip-check:
+  - CKV_GCP_80   # BigQuery CSEK: requires KMS key management outside this pipeline's scope
+  - CKV_GCP_81   # BigQuery dataset CSEK: requires KMS key management outside this pipeline's scope
+  - CKV_GCP_83   # Pub/Sub CSEK: requires KMS key management outside this pipeline's scope
+  - CKV_GCP_87   # Data Fusion private: requires VPC network peering outside this pipeline's scope
+  - CKV_GCP_49   # SA user role at project level: required for Dataflow to impersonate pipeline SA
+  - CKV_GCP_41   # SA user role: required for Dataflow job submission
+  - CKV_GCP_62   # Storage access logging: requires a separate log bucket outside this pipeline's scope
+  - CKV_GCP_104  # Data Fusion Stackdriver logging: enabled via options map, Checkov version mismatch
+  - CKV_GCP_105  # Data Fusion Stackdriver monitoring: enabled via options map, Checkov version mismatch
+  - CKV_GCP_121  # BigQuery deletion_protection: explicitly set to true, Checkov version mismatch
