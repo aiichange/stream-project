@@ -3,7 +3,7 @@ import csv
 import os
 import random
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from dotenv import load_dotenv
 from google.cloud import storage
@@ -94,7 +94,7 @@ if __name__ == "__main__":
     if not bucket:
         parser.error("--bucket or BATCH_BUCKET environment variable is required")
 
-    base_date = datetime.utcnow().date() - timedelta(days=10)
+    base_date = datetime.now(timezone.utc).date() - timedelta(days=10)
     rows = []
     for index in range(args.rows):
         date = base_date + timedelta(days=index % 30)
@@ -106,4 +106,4 @@ if __name__ == "__main__":
     print(f"Generated {len(rows)} synthetic rows into {args.output}")
 
     if args.upload:
-        upload_to_gcs(args.project, args.bucket, args.output, args.destination)
+        upload_to_gcs(project_id, bucket, args.output, destination)
