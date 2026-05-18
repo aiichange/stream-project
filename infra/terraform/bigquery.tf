@@ -1,4 +1,5 @@
 resource "google_bigquery_dataset" "stock_intelligence" {
+  #checkov:skip=CKV_GCP_81:CSEK requires KMS key management outside this pipeline's scope
   dataset_id                  = var.dataset_id
   location                    = var.region
   default_table_expiration_ms = 31536000000
@@ -6,8 +7,10 @@ resource "google_bigquery_dataset" "stock_intelligence" {
 }
 
 resource "google_bigquery_table" "stream_stock_prices" {
-  dataset_id = google_bigquery_dataset.stock_intelligence.dataset_id
-  table_id   = "stream_stock_prices"
+  #checkov:skip=CKV_GCP_80:CSEK requires KMS key management outside this pipeline's scope
+  dataset_id          = google_bigquery_dataset.stock_intelligence.dataset_id
+  table_id            = "stream_stock_prices"
+  deletion_protection = true
   schema = jsonencode([
     { name = "symbol", type = "STRING", mode = "REQUIRED" },
     { name = "timestamp", type = "TIMESTAMP", mode = "REQUIRED" },
@@ -23,8 +26,10 @@ resource "google_bigquery_table" "stream_stock_prices" {
 }
 
 resource "google_bigquery_table" "batch_market_factors" {
-  dataset_id = google_bigquery_dataset.stock_intelligence.dataset_id
-  table_id   = "batch_market_factors"
+  #checkov:skip=CKV_GCP_80:CSEK requires KMS key management outside this pipeline's scope
+  dataset_id          = google_bigquery_dataset.stock_intelligence.dataset_id
+  table_id            = "batch_market_factors"
+  deletion_protection = true
   schema = jsonencode([
     { name = "factor_date", type = "DATE", mode = "REQUIRED" },
     { name = "region", type = "STRING", mode = "REQUIRED" },
@@ -45,8 +50,10 @@ resource "google_bigquery_table" "batch_market_factors" {
 }
 
 resource "google_bigquery_table" "stock_factor_analysis_view" {
-  dataset_id = google_bigquery_dataset.stock_intelligence.dataset_id
-  table_id   = "stock_factor_analysis_view"
+  #checkov:skip=CKV_GCP_80:CSEK requires KMS key management outside this pipeline's scope
+  dataset_id          = google_bigquery_dataset.stock_intelligence.dataset_id
+  table_id            = "stock_factor_analysis_view"
+  deletion_protection = true
   view {
     query          = <<-SQL
       SELECT
