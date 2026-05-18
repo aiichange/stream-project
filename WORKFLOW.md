@@ -74,9 +74,17 @@ This file documents the recommended workflow for setting up and running the Stoc
 
 ## Remote Terraform state (recommended)
 
-- For production, use a remote Terraform backend such as a GCS bucket.
-- Create a dedicated bucket for Terraform state and configure `terraform init` with `-backend-config`.
-- This prevents local state drift and enables safe team collaboration.
+- The repository now includes a GCS backend config in `infra/terraform/backend.tf`.
+- The backend bucket is `stock-intel-terraform-state-asia-south1` and state is stored under `terraform/state`.
+- Create the bucket before the first `terraform init` with:
+  - `gsutil mb -l asia-south1 gs://stock-intel-terraform-state-asia-south1`
+- Then run `terraform init` in `infra/terraform` to migrate local state to the remote backend.
+- This enables shared Terraform state and safer team collaboration.
+
+## Environment approval
+
+- `gcp-deploy.yml` is configured to use the `production` environment.
+- Enable environment protection in GitHub to require manual approval before deployment.
 
 ## GCP CLI setup and authentication
 
