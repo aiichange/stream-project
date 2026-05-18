@@ -84,6 +84,14 @@ This project implements a production-style Google Cloud data engineering pipelin
   3. Merge `develop` into `master` after review.
   4. Deploy from `master` with GitHub Actions.
 
+## Remote Terraform state
+
+- A GCS backend is configured in `infra/terraform/backend.tf`.
+- The backend bucket is `stock-intel-terraform-state-asia-south1` and state is stored under `terraform/state`.
+- Create the bucket before the first `terraform init` or bootstrap it manually with:
+  - `gsutil mb -l asia-south1 gs://stock-intel-terraform-state-asia-south1`
+- This enables shared Terraform state and safer production deployments.
+
 ## Notes
 
 - The Data Fusion stage is included for batch ETL and produces a clean CSV for Dataflow.

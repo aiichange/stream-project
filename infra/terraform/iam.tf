@@ -17,6 +17,8 @@ locals {
 }
 
 resource "google_project_iam_member" "pipeline_roles" {
+  #checkov:skip=CKV_GCP_49:roles/iam.serviceAccountUser is required for Dataflow to impersonate the pipeline SA
+  #checkov:skip=CKV_GCP_41:roles/iam.serviceAccountUser is required for Dataflow job submission
   for_each = toset(local.required_roles)
   project  = var.project_id
   role     = each.value

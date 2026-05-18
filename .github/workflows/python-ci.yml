@@ -43,7 +43,7 @@ jobs:
       - name: Initialize Terraform
         run: |
           cd infra/terraform
-          terraform init -input=false
+          terraform init -backend=false -input=false
 
       - name: Validate Terraform configuration
         run: |
@@ -57,4 +57,4 @@ jobs:
 
       - name: Run Checkov policy scan
         run: |
-          checkov -d infra/terraform
+          checkov -d infra/terraform --config-file infra/terraform/.checkov.yaml
