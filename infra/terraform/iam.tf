@@ -12,7 +12,8 @@ locals {
     "roles/datafusion.admin",
     "roles/iam.serviceAccountUser",
     "roles/logging.logWriter",
-    "roles/monitoring.metricWriter"
+    "roles/monitoring.metricWriter",
+    "roles/resourcemanager.projectIamAdmin"
   ]
 }
 
