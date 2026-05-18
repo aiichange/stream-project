@@ -48,7 +48,7 @@ resource "google_bigquery_table" "stock_factor_analysis_view" {
   dataset_id = google_bigquery_dataset.stock_intelligence.dataset_id
   table_id   = "stock_factor_analysis_view"
   view {
-    query = <<-SQL
+    query          = <<-SQL
       SELECT
         s.symbol,
         s.timestamp,
