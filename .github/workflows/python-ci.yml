@@ -43,7 +43,7 @@ jobs:
       - name: Initialize Terraform
         run: |
           cd infra/terraform
-          terraform init -input=false
+          terraform init -backend=false -input=false
 
       - name: Validate Terraform configuration
         run: |
