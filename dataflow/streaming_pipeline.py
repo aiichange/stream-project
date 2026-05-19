@@ -3,7 +3,7 @@ import json
 from datetime import datetime
 
 import apache_beam as beam
-from apache_beam.options.pipeline_options import PipelineOptions, StandardOptions
+from apache_beam.options.pipeline_options import PipelineOptions, StandardOptions, GoogleCloudOptions
 from apache_beam.io.gcp.bigquery import WriteToBigQuery
 
 
@@ -45,10 +45,11 @@ def run(argv=None):
     pipeline_options = PipelineOptions(pipeline_args)
     pipeline_options.view_as(StandardOptions).streaming = True
     pipeline_options.view_as(StandardOptions).runner = "DataflowRunner"
-    pipeline_options.view_as(PipelineOptions).project = args.project
-    pipeline_options.view_as(PipelineOptions).region = args.region
-    pipeline_options.view_as(PipelineOptions).temp_location = args.temp_location
-    pipeline_options.view_as(PipelineOptions).staging_location = args.staging_location
+    gcp_opts = pipeline_options.view_as(GoogleCloudOptions)
+    gcp_opts.project = args.project
+    gcp_opts.region = args.region
+    gcp_opts.temp_location = args.temp_location
+    gcp_opts.staging_location = args.staging_location
 
     table_spec = f"{args.output_project}:{args.output_dataset}.{args.output_table}"
     table_schema = {

@@ -1,99 +1,161 @@
 # Stock Market Intelligence Data Pipeline
 
-This project implements a production-style Google Cloud data engineering pipeline for near-real-time stock price analysis enriched with batch environmental and market-impact data.
+A production-style GCP data engineering pipeline for near-real-time stock price analysis enriched with live and batch market factor data.
 
 ## Architecture
 
-- **Streaming ingestion:** Yahoo Finance price updates are published to Pub/Sub.
-- **Streaming processing:** Dataflow (Apache Beam) consumes Pub/Sub and writes stock records to BigQuery.
-- **Batch generation:** Python generates a synthetic batch dataset of environmental, economic, sentiment, and risk factors.
-- **Batch landing:** Batch CSV is written to Cloud Storage.
-- **Batch ETL:** Cloud Data Fusion cleans and normalizes the batch data, writing a transformed CSV back to Cloud Storage.
-- **Batch processing:** Dataflow batch job loads transformed batch data into BigQuery.
-- **Analytics:** BigQuery joins streaming and batch datasets for sector-based analysis.
+```
+PUBLISHERS (local / Cloud Run in production)
+├── yahoo_publish.py      → stock-prices-topic     (every 30s)
+└── factor_publish.py     → market-factors-topic   (every 120s)
+
+DATAFLOW STREAMING
+├── streaming_pipeline.py → stream_stock_prices    (BigQuery)
+└── factor_pipeline.py    → live_market_factors    (BigQuery)
+
+DATAFLOW BATCH (run once or daily)
+└── batch_pipeline.py     → batch_market_factors   (BigQuery)
+      ↑ input: etl_clean.py output from GCS
+
+BIGQUERY ANALYTICAL LAYER
+├── stock_factor_analysis_view  — stream + live (preferred) + batch (fallback)
+└── stock_live_factor_view      — stream + live only (real data only)
+```
 
 ## Components
 
-- `infra/terraform/` — Terraform configuration for Pub/Sub, GCS, BigQuery, IAM, and Data Fusion.
-- `data_generation/` — Python scripts for synthetic batch data generation and Yahoo Finance Pub/Sub publishing.
-- `dataflow/` — Apache Beam streaming and batch pipelines.
-- `datafusion/` — Data Fusion ETL guidance for the batch pipeline.
-- `CONTRIBUTING.md` — contribution guidelines and repository standards.
-- `WORKFLOW.md` — local setup, deployment, and environment workflows.
+| Path | Purpose |
+|---|---|
+| `infra/terraform/` | Terraform IaC for all GCP resources |
+| `data_generation/synthetic_batch_generator.py` | Generates synthetic batch CSV with dirty rows |
+| `data_generation/etl_clean.py` | Python ETL: cleans raw CSV, writes to GCS |
+| `data_generation/yahoo_publish.py` | Publishes live stock prices to Pub/Sub via yfinance |
+| `data_generation/factor_publish.py` | Publishes live market factors (crude oil, FX, weather, AQI, macro) |
+| `dataflow/batch_pipeline.py` | Apache Beam batch job: GCS CSV → BigQuery |
+| `dataflow/streaming_pipeline.py` | Apache Beam streaming: Pub/Sub stock prices → BigQuery |
+| `dataflow/factor_pipeline.py` | Apache Beam streaming: Pub/Sub market factors → BigQuery |
+| `datafusion/` | Cloud Data Fusion ETL reference (superseded by etl_clean.py) |
+| `WORKFLOW.md` | Local setup, run commands, stop commands |
+| `development.md` | Architecture decisions, what was built, lessons learned |
+| `process-github.md` | GitHub branch strategy, PR workflow, CI/CD |
+| `production-setup-report.md` | CI/CD pipeline details and GitHub Actions setup |
 
 ## GCP Configuration
 
-- Project: `ga4bigquery-431504`
-- Region: `asia-south1`
-- Preferred dataset: `stock_intelligence`
+| Setting | Value |
+|---|---|
+| Project | `ga4bigquery-431504` |
+| Region | `asia-south1` (Mumbai) |
+| BigQuery dataset | `stock_intelligence` |
+| GCS bucket | `stock-intel-batch-landing-asia-south1` |
+| Pub/Sub topics | `stock-prices-topic`, `market-factors-topic` |
 
 ## Quick Start
 
-1. Install dependencies and authenticate:
-   - `gcloud auth login`
-   - `gcloud config set project ga4bigquery-431504`
-   - `gcloud auth application-default login`
+### 1. Prerequisites
+```powershell
+gcloud auth login
+gcloud auth application-default login
+gcloud config set project ga4bigquery-431504
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r data_generation/requirements.txt
+pip install -r dataflow/requirements.txt
+```
 
-2. Deploy infrastructure:
-   - `cd infra/terraform`
-   - `terraform init`
-   - `terraform apply`
+### 2. Run Batch Pipeline (once or daily)
+```powershell
+# Generate and upload raw CSV
+python data_generation/synthetic_batch_generator.py \
+  --project ga4bigquery-431504 \
+  --bucket stock-intel-batch-landing-asia-south1 --upload --dirty
 
-3. Generate batch data and upload to GCS:
-   - `python ../data_generation/synthetic_batch_generator.py --project ga4bigquery-431504 --bucket stock-intel-batch-landing-asia-south1 --upload`
+# Clean the CSV
+python data_generation/etl_clean.py \
+  --project ga4bigquery-431504 \
+  --input gs://stock-intel-batch-landing-asia-south1/batch/input/batch_market_factors.csv \
+  --output gs://stock-intel-batch-landing-asia-south1/batch/etl-output/market_factors_cleaned.csv
 
-4. (Optional) Use a local Python virtual environment and `.env` file:
-   - `python -m venv .venv`
-   - `./.venv/Scripts/Activate.ps1`
-   - `pip install -r ../data_generation/requirements.txt`
-   - Copy `.env.example` to `.env` and customize values.
+# Load into BigQuery
+python dataflow/batch_pipeline.py \
+  --project ga4bigquery-431504 --region asia-south1 \
+  --input gs://stock-intel-batch-landing-asia-south1/batch/etl-output/market_factors_cleaned.csv \
+  --output_project ga4bigquery-431504 --output_dataset stock_intelligence \
+  --output_table batch_market_factors \
+  --temp_location gs://stock-intel-batch-landing-asia-south1/temp \
+  --staging_location gs://stock-intel-batch-landing-asia-south1/staging \
+  --runner DataflowRunner --worker_zone asia-south1-b --machine_type e2-standard-2
+```
 
-5. Run the Data Fusion ETL pipeline:
-   - Follow `datafusion/README.md`
+### 3. Run Streaming Pipelines (Terminal 1 — submit to Dataflow)
+```powershell
+python dataflow/streaming_pipeline.py \
+  --project ga4bigquery-431504 --region asia-south1 \
+  --input_topic projects/ga4bigquery-431504/topics/stock-prices-topic \
+  --output_project ga4bigquery-431504 --output_dataset stock_intelligence \
+  --output_table stream_stock_prices \
+  --temp_location gs://stock-intel-batch-landing-asia-south1/temp \
+  --staging_location gs://stock-intel-batch-landing-asia-south1/staging \
+  --runner DataflowRunner --worker_zone asia-south1-b --machine_type e2-standard-2 \
+  --job_name "stream-stock-prices-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+```
 
-5. Run the Dataflow batch job:
-   - `python ../dataflow/batch_pipeline.py --project ga4bigquery-431504 --region asia-south1 --input gs://stock-intel-batch-landing-asia-south1/batch/etl/market_factors_cleaned.csv --output-project ga4bigquery-431504 --output-dataset stock_intelligence --output-table batch_market_factors --temp_location gs://stock-intel-batch-landing-asia-south1/temp`
+### 4. Run Factor Streaming Pipeline (Terminal 2 — submit to Dataflow)
+```powershell
+python dataflow/factor_pipeline.py \
+  --project ga4bigquery-431504 --region asia-south1 \
+  --input_topic projects/ga4bigquery-431504/topics/market-factors-topic \
+  --output_project ga4bigquery-431504 --output_dataset stock_intelligence \
+  --output_table live_market_factors \
+  --temp_location gs://stock-intel-batch-landing-asia-south1/temp \
+  --staging_location gs://stock-intel-batch-landing-asia-south1/staging \
+  --runner DataflowRunner --worker_zone asia-south1-b --machine_type e2-standard-2 \
+  --job_name "factor-pipeline-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+```
 
-6. Start the near-real-time publisher and streaming Dataflow job:
-   - `python ../data_generation/yahoo_publish.py --project ga4bigquery-431504 --topic stock-prices-topic --interval 60`
-   - `python ../dataflow/streaming_pipeline.py --project ga4bigquery-431504 --region asia-south1 --input_topic projects/ga4bigquery-431504/topics/stock-prices-topic --output_project ga4bigquery-431504 --output_dataset stock_intelligence --output_table stream_stock_prices --temp_location gs://stock-intel-batch-landing-asia-south1/temp`
+### 5. Start Publishers (Terminal 3 & 4)
+```powershell
+# Terminal 3 — stock prices
+python data_generation/yahoo_publish.py \
+  --project ga4bigquery-431504 --topic stock-prices-topic --interval 30
 
-7. Analyze in BigQuery:
-   - Use the view `stock_intelligence.stock_factor_analysis_view` for sector-level joins.
+# Terminal 4 — market factors
+python data_generation/factor_publish.py \
+  --project ga4bigquery-431504 --topic market-factors-topic --interval 120
+```
 
-## Branching strategy
+### 6. Stop Everything
+```powershell
+# Publishers: Ctrl+C in each terminal
 
-- Use `develop` for ongoing development and feature work.
-- Use `master` for stable production-ready code.
-- Create pull requests from `develop` to `master` when the pipeline is ready for release.
+# Dataflow jobs
+gcloud dataflow jobs list --region=asia-south1 --project=ga4bigquery-431504
+gcloud dataflow jobs cancel JOB_ID --region=asia-south1 --project=ga4bigquery-431504
+```
+
+### 7. Query BigQuery Views
+```sql
+-- Live enriched view (real data only)
+SELECT * FROM `ga4bigquery-431504.stock_intelligence.stock_live_factor_view`
+WHERE price > 0 ORDER BY timestamp DESC LIMIT 50;
+
+-- Full view (live preferred, batch fallback)
+SELECT * FROM `ga4bigquery-431504.stock_intelligence.stock_factor_analysis_view`
+WHERE price > 0 ORDER BY timestamp DESC LIMIT 50;
+```
+
+## Branching Strategy
+
+| Branch | Purpose |
+|---|---|
+| `master` | Stable, production-ready |
+| `develop` | Integration branch for ongoing work |
+| `feature/*` | Individual feature branches off `develop` |
 
 ## CI/CD
 
-- GitHub Actions workflows are configured in `.github/workflows/python-ci.yml`, `.github/workflows/terraform-pr.yml`, and `.github/workflows/gcp-deploy.yml`.
-- `python-ci.yml` validates Python code, installs dependencies, runs Terraform init/validate, checks Terraform formatting, and performs a Checkov policy scan.
-- `terraform-pr.yml` runs on pull requests targeting `develop` and `master` and validates Terraform configuration before merge.
-
-## Continuous Deployment
-
-- `gcp-deploy.yml` is the production deployment workflow.
-- It runs on pushes to `master` and via manual dispatch.
-- It authenticates to GCP using GitHub secrets, initializes Terraform, validates configuration, plans changes, and applies the plan.
-- Recommended release flow:
-  1. Develop in `develop` and feature branches.
-  2. Run PR validation via `terraform-pr.yml`.
-  3. Merge `develop` into `master` after review.
-  4. Deploy from `master` with GitHub Actions.
-
-## Remote Terraform state
-
-- A GCS backend is configured in `infra/terraform/backend.tf`.
-- The backend bucket is `stock-intel-terraform-state-asia-south1` and state is stored under `terraform/state`.
-- Create the bucket before the first `terraform init` or bootstrap it manually with:
-  - `gsutil mb -l asia-south1 gs://stock-intel-terraform-state-asia-south1`
-- This enables shared Terraform state and safer production deployments.
-
-## Notes
-
-- The Data Fusion stage is included for batch ETL and produces a clean CSV for Dataflow.
-- The streaming and batch datasets are joined by sector and date in the BigQuery view.
-- This scaffold is designed for production-style GCP deployment with infrastructure as code and reusable Python pipelines.
+| Workflow | Trigger | Action |
+|---|---|---|
+| `python-ci.yml` | Push/PR to `develop`, `master` | Lint, syntax check, Terraform validate |
+| `terraform-pr.yml` | PR to `develop`, `master` | Terraform plan + Checkov security scan |
+| `gcp-deploy.yml` | Push to `master` or manual | Terraform apply to GCP |

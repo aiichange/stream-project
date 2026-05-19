@@ -44,15 +44,15 @@ EXCHANGE_MAP = {
 }
 
 
-def build_message(symbol, quote):
+def build_message(symbol, fast_info):
     return {
         "symbol": symbol,
         "timestamp": datetime.utcnow().isoformat() + "Z",
-        "price": float(quote.get("regularMarketPrice", 0.0) or 0.0),
-        "open": float(quote.get("regularMarketOpen", 0.0) or 0.0),
-        "high": float(quote.get("regularMarketDayHigh", 0.0) or 0.0),
-        "low": float(quote.get("regularMarketDayLow", 0.0) or 0.0),
-        "volume": int(quote.get("regularMarketVolume", 0) or 0),
+        "price": float(getattr(fast_info, "last_price", None) or 0.0),
+        "open": float(getattr(fast_info, "open", None) or 0.0),
+        "high": float(getattr(fast_info, "day_high", None) or 0.0),
+        "low": float(getattr(fast_info, "day_low", None) or 0.0),
+        "volume": int(getattr(fast_info, "last_volume", None) or 0),
         "sector": SECTOR_MAP.get(symbol, "Unknown"),
         "exchange": EXCHANGE_MAP.get(symbol, "UNKNOWN"),
         "ingestion_time": datetime.utcnow().isoformat() + "Z",
@@ -65,24 +65,15 @@ def publish_stock_prices(project_id, topic_name, interval_seconds, tickers):
 
     while True:
         print(f"Publishing stock quotes for {len(tickers)} symbols to {topic_path}...")
-        quotes = yf.download(tickers, period="1d", interval="1m", progress=False, threads=False)
-        latest = {}
-        if isinstance(quotes, dict) or hasattr(quotes, "columns"):
-            for symbol in tickers:
-                ticker = yf.Ticker(symbol)
-                quote = ticker.fast_info if hasattr(ticker, "fast_info") else ticker.info
-                latest[symbol] = quote
-        else:
-            # Fallback: get prices individually
-            for symbol in tickers:
-                ticker = yf.Ticker(symbol)
-                latest[symbol] = ticker.fast_info if hasattr(ticker, "fast_info") else ticker.info
-
         for symbol in tickers:
-            quote = latest.get(symbol, {})
-            payload = json.dumps(build_message(symbol, quote)).encode("utf-8")
-            publisher.publish(topic_path, payload)
-            print(f"Published {symbol}: {payload}")
+            try:
+                fast_info = yf.Ticker(symbol).fast_info
+                msg = build_message(symbol, fast_info)
+                payload = json.dumps(msg).encode("utf-8")
+                publisher.publish(topic_path, payload)
+                print(f"Published {symbol}: price={msg['price']} open={msg['open']} high={msg['high']} low={msg['low']}", flush=True)
+            except Exception as e:
+                print(f"Error fetching {symbol}: {e}", flush=True)
 
         time.sleep(interval_seconds)
 

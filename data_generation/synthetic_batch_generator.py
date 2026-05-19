@@ -60,6 +60,44 @@ def create_row(base_date, region, sector):
     }
 
 
+def create_dirty_rows(base_date):
+    """Return 13 intentionally bad rows to test Wrangler filter-rows-on.
+
+    Categories (all trigger filter-rows-on empty-or-null-columns):
+    - 5 rows: empty factor_date  → dropped by Wrangler
+    - 5 rows: empty region       → dropped by Wrangler
+    - 3 rows: empty sector       → dropped by Wrangler
+
+    Note: non-numeric type-cast errors cause hard Spark task failure in CDAP
+    Wrangler (NumberFormatException is not routed to error port by default).
+    Those require a #pragma on-error send-to-error directive to handle gracefully.
+    """
+    dirty = []
+    region = random.choice(REGIONS)
+    sector = random.choice(SECTORS)
+
+    # empty factor_date
+    for _ in range(5):
+        row = create_row(base_date, random.choice(REGIONS), random.choice(SECTORS))
+        row["factor_date"] = ""
+        dirty.append(row)
+
+    # empty region
+    for _ in range(5):
+        row = create_row(base_date, region, random.choice(SECTORS))
+        row["region"] = ""
+        dirty.append(row)
+
+    # empty sector
+    for _ in range(3):
+        row = create_row(base_date, random.choice(REGIONS), sector)
+        row["sector"] = ""
+        dirty.append(row)
+
+    random.shuffle(dirty)
+    return dirty
+
+
 def write_csv(path, rows):
     with open(path, "w", newline="", encoding="utf-8") as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=FIELD_NAMES)
@@ -83,6 +121,7 @@ if __name__ == "__main__":
     parser.add_argument("--output", default="batch_market_factors.csv", help="Local CSV output path")
     parser.add_argument("--upload", action="store_true", help="Upload the generated CSV to Cloud Storage")
     parser.add_argument("--destination", default=None, help="Destination path in GCS")
+    parser.add_argument("--dirty", action="store_true", help="Append ~15 intentionally bad rows to test Wrangler")
     args = parser.parse_args()
 
     project_id = args.project or os.getenv("PROJECT_ID")
@@ -102,8 +141,14 @@ if __name__ == "__main__":
         sector = random.choice(SECTORS)
         rows.append(create_row(date, region, sector))
 
+    if args.dirty:
+        dirty = create_dirty_rows(base_date)
+        rows.extend(dirty)
+        random.shuffle(rows)
+        print(f"Injected {len(dirty)} dirty rows (5 empty factor_date, 5 empty region, 3 empty sector)")
+
     write_csv(args.output, rows)
-    print(f"Generated {len(rows)} synthetic rows into {args.output}")
+    print(f"Generated {len(rows)} total rows into {args.output}")
 
     if args.upload:
         upload_to_gcs(project_id, bucket, args.output, destination)

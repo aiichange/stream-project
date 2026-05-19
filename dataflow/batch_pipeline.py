@@ -1,15 +1,23 @@
 import argparse
 import csv
-from datetime import datetime
 
 import apache_beam as beam
-from apache_beam.options.pipeline_options import PipelineOptions
+from apache_beam.options.pipeline_options import (
+    PipelineOptions, GoogleCloudOptions, StandardOptions,
+)
 from apache_beam.io.gcp.bigquery import WriteToBigQuery
+
+FIELD_NAMES = [
+    "factor_date", "region", "sector", "weather_score", "crude_oil_price",
+    "usd_inr_rate", "inflation_rate", "interest_rate", "aqi",
+    "news_sentiment", "social_sentiment", "geo_risk", "supply_chain_risk",
+    "demand_index", "batch_id",
+]
 
 
 class ParseCsvRow(beam.DoFn):
     def process(self, element):
-        row = next(csv.DictReader([element]))
+        row = next(csv.DictReader([element], fieldnames=FIELD_NAMES))
         yield {
             "factor_date": row.get("factor_date"),
             "region": row.get("region"),
@@ -42,11 +50,12 @@ def run(argv=None):
     args, pipeline_args = parser.parse_known_args(argv)
 
     pipeline_options = PipelineOptions(pipeline_args)
-    pipeline_options.view_as(PipelineOptions).project = args.project
-    pipeline_options.view_as(PipelineOptions).region = args.region
-    pipeline_options.view_as(PipelineOptions).temp_location = args.temp_location
-    pipeline_options.view_as(PipelineOptions).staging_location = args.staging_location
-    pipeline_options.view_as(PipelineOptions).runner = "DataflowRunner"
+    gcp_opts = pipeline_options.view_as(GoogleCloudOptions)
+    gcp_opts.project = args.project
+    gcp_opts.region = args.region
+    gcp_opts.temp_location = args.temp_location
+    gcp_opts.staging_location = args.staging_location
+    pipeline_options.view_as(StandardOptions).runner = "DataflowRunner"
 
     table_spec = f"{args.output_project}:{args.output_dataset}.{args.output_table}"
     table_schema = {
