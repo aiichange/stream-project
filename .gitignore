@@ -23,3 +23,7 @@ crash.log
 *.swp
 *.swo
 .vscode/
+
+# Generated data files
+*.csv
+batch_market_factors.csv
