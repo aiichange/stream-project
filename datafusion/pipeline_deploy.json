@@ -1,0 +1,79 @@
+{
+  "artifact": {
+    "name": "cdap-data-pipeline",
+    "version": "6.11.1",
+    "scope": "SYSTEM"
+  },
+  "description": "ETL pipeline: read raw batch market factors CSV from GCS, cast types via Wrangler, write cleaned CSV to GCS",
+  "name": "stock_market_factors_etl",
+  "config": {
+    "resources": {"memoryMB": 2048, "virtualCores": 1},
+    "driverResources": {"memoryMB": 2048, "virtualCores": 1},
+    "connections": [
+      {"from": "GCSSource", "to": "Wrangler"},
+      {"from": "Wrangler", "to": "GCSSink"}
+    ],
+    "comments": [],
+    "postActions": [],
+    "properties": {},
+    "processTimingEnabled": true,
+    "stageLoggingEnabled": false,
+    "stages": [
+      {
+        "name": "GCSSource",
+        "plugin": {
+          "name": "GCSFile",
+          "type": "batchsource",
+          "label": "GCSFile",
+          "artifact": {"name": "google-cloud", "version": "0.24.1", "scope": "SYSTEM"},
+          "properties": {
+            "project": "ga4bigquery-431504",
+            "referenceName": "raw_batch_market_factors",
+            "path": "gs://stock-intel-batch-landing-asia-south1/batch/input/batch_market_factors.csv",
+            "format": "csv",
+            "skipHeader": "true",
+            "nullValue": "\\N",
+            "schema": "{\"type\":\"record\",\"name\":\"etlSchemaBody\",\"fields\":[{\"name\":\"factor_date\",\"type\":\"string\"},{\"name\":\"region\",\"type\":\"string\"},{\"name\":\"sector\",\"type\":\"string\"},{\"name\":\"weather_score\",\"type\":\"string\"},{\"name\":\"crude_oil_price\",\"type\":\"string\"},{\"name\":\"usd_inr_rate\",\"type\":\"string\"},{\"name\":\"inflation_rate\",\"type\":\"string\"},{\"name\":\"interest_rate\",\"type\":\"string\"},{\"name\":\"aqi\",\"type\":\"string\"},{\"name\":\"news_sentiment\",\"type\":\"string\"},{\"name\":\"social_sentiment\",\"type\":\"string\"},{\"name\":\"geo_risk\",\"type\":\"string\"},{\"name\":\"supply_chain_risk\",\"type\":\"string\"},{\"name\":\"demand_index\",\"type\":\"string\"},{\"name\":\"batch_id\",\"type\":\"string\"}]}"
+          }
+        }
+      },
+      {
+        "name": "Wrangler",
+        "plugin": {
+          "name": "Wrangler",
+          "type": "transform",
+          "label": "Wrangler",
+          "artifact": {"name": "wrangler-transform", "version": "4.11.1", "scope": "SYSTEM"},
+          "properties": {
+            "field": "*",
+            "precondition": "false",
+            "threshold": "20",
+            "directives": "set-type :weather_score double\nset-type :crude_oil_price double\nset-type :usd_inr_rate double\nset-type :inflation_rate double\nset-type :interest_rate double\nset-type :aqi integer\nset-type :news_sentiment double\nset-type :social_sentiment double\nset-type :geo_risk double\nset-type :supply_chain_risk double\nset-type :demand_index double\nfilter-rows-on empty-or-null-columns factor_date,region,sector",
+            "schema": "{\"type\":\"record\",\"name\":\"etlSchemaBody\",\"fields\":[{\"name\":\"factor_date\",\"type\":[\"null\",\"string\"]},{\"name\":\"region\",\"type\":[\"null\",\"string\"]},{\"name\":\"sector\",\"type\":[\"null\",\"string\"]},{\"name\":\"weather_score\",\"type\":[\"null\",\"double\"]},{\"name\":\"crude_oil_price\",\"type\":[\"null\",\"double\"]},{\"name\":\"usd_inr_rate\",\"type\":[\"null\",\"double\"]},{\"name\":\"inflation_rate\",\"type\":[\"null\",\"double\"]},{\"name\":\"interest_rate\",\"type\":[\"null\",\"double\"]},{\"name\":\"aqi\",\"type\":[\"null\",\"int\"]},{\"name\":\"news_sentiment\",\"type\":[\"null\",\"double\"]},{\"name\":\"social_sentiment\",\"type\":[\"null\",\"double\"]},{\"name\":\"geo_risk\",\"type\":[\"null\",\"double\"]},{\"name\":\"supply_chain_risk\",\"type\":[\"null\",\"double\"]},{\"name\":\"demand_index\",\"type\":[\"null\",\"double\"]},{\"name\":\"batch_id\",\"type\":[\"null\",\"string\"]}]}"
+          }
+        }
+      },
+      {
+        "name": "GCSSink",
+        "plugin": {
+          "name": "GCS",
+          "type": "batchsink",
+          "label": "GCS",
+          "artifact": {"name": "google-cloud", "version": "0.24.1", "scope": "SYSTEM"},
+          "properties": {
+            "project": "ga4bigquery-431504",
+            "referenceName": "cleaned_market_factors",
+            "path": "gs://stock-intel-batch-landing-asia-south1/batch/etl-output/",
+            "format": "csv",
+            "outputFilePrefix": "market_factors_cleaned",
+            "writeHeader": "true",
+            "overwrite": "true"
+          }
+        }
+      }
+    ],
+    "schedule": "0 * * * *",
+    "engine": "spark",
+    "numOfRecordsPreview": 100
+  }
+}
